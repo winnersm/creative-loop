@@ -1,0 +1,568 @@
+// Creative Loop — modelo de datos del MVP.
+// Dinero en céntimos (Int). Fechas en UTC.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  MANAGER
+  EDITOR
+  BUYER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProductionStatus {
+  BRIEF
+  IN_PROGRESS
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+/// Por qué se archivó un creativo. Vocabulario cerrado para poder medirlo.
+enum ArchiveReason {
+  NOT_TESTED // descartado sin testear
+  CYCLE_DONE // ya cumplió su ciclo
+  OFFER_CLOSED
+  DUPLICATE
+  CONCEPT_ARCHIVED // lo pone el sistema al archivar el concepto
+  OTHER
+}
+
+enum PerformanceStatus {
+  NOT_LAUNCHED
+  TESTING
+  WINNER
+  LOSER
+  INCONCLUSIVE
+}
+
+enum OfferGate {
+  OK
+  BLOCKED
+}
+
+enum AssetFormat {
+  VERTICAL // 9:16
+  PORTRAIT // 4:5
+  SQUARE // 1:1
+  LANDSCAPE // 16:9
+}
+
+enum MediaType {
+  VIDEO
+  IMAGE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum VersionStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum QaSeverity {
+  BLOCKING
+  WARNING
+}
+
+enum QaResult {
+  PASS
+  FAIL
+}
+
+enum CommentSeverity {
+  MUST
+  SHOULD
+  NIT
+}
+
+enum DeploymentSource {
+  TOKEN
+  MANUAL
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+// ─── Usuarios ────────────────────────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  name           String
+  passwordHash   String
+  role           Role       @default(EDITOR)
+  /// Canal privado de Slack de esta persona. Recibe ahí lo mismo que en la campana.
+  slackChannelId String?
+  status         UserStatus @default(ACTIVE)
+  lastLoginAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  assignedAssets   Asset[]        @relation("AssetEditor")
+  conceptsMade     Concept[]
+  conceptsArchived Concept[]      @relation("ConceptArchivedBy")
+  versions         Version[]
+  comments         Comment[]      @relation("CommentAuthor")
+  replies          CommentReply[]
+  statusEvents     StatusEvent[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+}
+
+// ─── Ofertas y configuración ─────────────────────────────────────────────────
+
+model Offer {
+  id              String    @id @default(cuid())
+  number          Int       @unique
+  code            String    @unique // OF012
+  name            String
+  product         String // se usa en el ad name: IMMUNO
+  geo             String // DE
+  language        String // de
+  channels        String[]  @default(["META"])
+  targetCpaCents  Int
+  payoutCents     Int
+  /// action_type de Meta que cuenta como conversión (purchase, lead, offsite_conversion.fb_pixel_custom…)
+  conversionEvent String    @default("purchase")
+  gate            OfferGate @default(OK)
+  gateNote        String?
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  assets     Asset[]
+  winnerRule WinnerRule?
+}
+
+model TagDimension {
+  id        String     @id @default(cuid())
+  key       String     @unique // angle, hook_type…
+  label     String
+  sortOrder Int        @default(0)
+  values    TagValue[]
+
+  conceptTags ConceptTag[]
+  overrides   Asset[]
+}
+
+model TagValue {
+  id          String       @id @default(cuid())
+  dimensionId String
+  dimension   TagDimension @relation(fields: [dimensionId], references: [id], onDelete: Cascade)
+  value       String
+  label       String
+  active      Boolean      @default(true)
+  sortOrder   Int          @default(0)
+
+  conceptTags ConceptTag[]
+  overrides   Asset[]
+
+  @@unique([dimensionId, value])
+}
+
+/// Etiquetas de equipo para los creativos (UGC, urgente…). Vocabulario cerrado: las gestiona el owner.
+model AssetLabel {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  /// Token de color de `LABEL_COLORS` (src/lib/status.ts), no un hex libre.
+  color     String
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  assets Asset[]
+}
+
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+// ─── Concepts y assets ───────────────────────────────────────────────────────
+
+model Concept {
+  id           String    @id @default(cuid())
+  number       Int       @unique
+  code         String    @unique // C082
+  /// Sin oferta: la oferta (y con ella producto, GEO e idioma) va en cada creativo.
+  title        String
+  hypothesis   String
+  references   String[]  @default([])
+  color        String
+  assetCounter Int       @default(0)
+  createdById  String
+  createdBy    User      @relation(fields: [createdById], references: [id])
+  /// Archivado: fuera del tablero salvo con «Archivados».
+  archivedAt   DateTime?
+  archivedById String?
+  archivedBy   User?     @relation("ConceptArchivedBy", fields: [archivedById], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tags   ConceptTag[]
+  assets Asset[]
+}
+
+model ConceptTag {
+  conceptId   String
+  concept     Concept      @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  dimensionId String
+  dimension   TagDimension @relation(fields: [dimensionId], references: [id])
+  valueId     String
+  value       TagValue     @relation(fields: [valueId], references: [id])
+
+  @@id([conceptId, dimensionId])
+}
+
+model Asset {
+  id                    String            @id @default(cuid())
+  conceptId             String
+  concept               Concept           @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  number                Int
+  code                  String            @unique // C082-A03
+  channel               String            @default("META")
+  /// Oferta del creativo. Obligatoria para aprobarlo (el ad name necesita producto y GEO).
+  offerId               String?
+  offer                 Offer?            @relation(fields: [offerId], references: [id])
+  format                AssetFormat
+  mediaType             MediaType
+  editorId              String?
+  editor                User?             @relation("AssetEditor", fields: [editorId], references: [id])
+  deadline              DateTime?
+  priority              Priority          @default(MEDIUM)
+  brief                 String            @default("")
+  /// Guion del video en texto libre (escenas, voz, texto en pantalla…).
+  script                String            @default("")
+  /// Guion traducido (al español si el original está en otro idioma; al inglés si está en español).
+  scriptTranslation     String            @default("")
+  /// Idioma de la traducción: "es" o "en".
+  scriptTranslationLang String            @default("")
+  /// El guion tal como estaba al traducirlo: si cambia, la traducción está desactualizada.
+  scriptTranslationOf   String            @default("")
+  /// Referencias propias de esta pieza. Se suman a las del concepto, no las sustituyen.
+  references            String[]          @default([])
+  /// Notas internas del equipo, en texto libre. Sin dinero: las ve el editor.
+  notes                 String            @default("")
+  primaryText           String            @default("")
+  headline              String            @default("")
+  cta                   String            @default("")
+  /// Única dimensión que el asset sobrescribe respecto al concept (la variable que prueba).
+  overrideDimensionId   String?
+  overrideDimension     TagDimension?     @relation(fields: [overrideDimensionId], references: [id])
+  overrideValueId       String?
+  overrideValue         TagValue?         @relation(fields: [overrideValueId], references: [id])
+  iteratedFromId        String?
+  iteratedFrom          Asset?            @relation("Iterations", fields: [iteratedFromId], references: [id])
+  iterations            Asset[]           @relation("Iterations")
+  productionStatus      ProductionStatus  @default(BRIEF)
+  /// Solo con productionStatus ARCHIVED.
+  archiveReason         ArchiveReason?
+  performanceStatus     PerformanceStatus @default(NOT_LAUNCHED)
+  testingSince          DateTime?
+  versionCounter        Int               @default(0)
+  startedAt             DateTime?
+  approvedVersionId     String?           @unique
+  approvedVersion       Version?          @relation("ApprovedVersion", fields: [approvedVersionId], references: [id])
+  approvedAt            DateTime?
+  markedLaunchedAt      DateTime?
+  /// F-905: inconclusive devuelto a la lista de "aprobados sin lanzar".
+  relaunchRequestedAt   DateTime?
+  /// Último análisis de IA de por qué funciona la pieza (hipótesis, no verdad).
+  aiAnalysis            Json?
+  aiAnalyzedAt          DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  versions     Version[]          @relation("AssetVersions")
+  statusEvents StatusEvent[]
+  deployments  Deployment[]
+  evaluations  WinnerEvaluation[]
+  labels       AssetLabel[]
+
+  @@unique([conceptId, number])
+  @@index([offerId])
+  @@index([editorId, productionStatus])
+  @@index([productionStatus])
+}
+
+model Version {
+  id              String        @id @default(cuid())
+  assetId         String
+  asset           Asset         @relation("AssetVersions", fields: [assetId], references: [id], onDelete: Cascade)
+  number          Int
+  code            String        @unique // C082-A03-V2
+  status          VersionStatus @default(UPLOADING)
+  originalKey     String
+  originalName    String
+  mimeType        String
+  sizeBytes       BigInt
+  uploadId        String?
+  proxyKey        String?
+  thumbKey        String?
+  /// Mosaico de miniaturas del timeline: 10 columnas, `spriteCount` fotogramas.
+  spriteKey       String?
+  spriteCount     Int?
+  spriteTileW     Int?
+  spriteTileH     Int?
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  fps             Float?
+  videoCodec      String?
+  audioCodec      String?
+  container       String?
+  hasAudio        Boolean?
+  processingError String?
+  processedAt     DateTime?
+  submittedAt     DateTime?
+  uploadedById    String
+  uploadedBy      User          @relation(fields: [uploadedById], references: [id])
+  createdAt       DateTime      @default(now())
+
+  qaChecks    QaCheck[]
+  comments    Comment[]
+  deployments Deployment[]
+  approvedFor Asset?       @relation("ApprovedVersion")
+
+  @@unique([assetId, number])
+}
+
+model QaCheck {
+  id        String     @id @default(cuid())
+  versionId String
+  version   Version    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  key       String
+  label     String
+  severity  QaSeverity
+  result    QaResult
+  detail    String     @default("")
+
+  @@index([versionId])
+}
+
+model Comment {
+  id         String          @id @default(cuid())
+  versionId  String
+  version    Version         @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User            @relation("CommentAuthor", fields: [authorId], references: [id])
+  /// Video: segundo del comentario. Imagen: null.
+  timeMs     Int?
+  /// Imagen: punto relativo (0–1). Video: null.
+  x          Float?
+  y          Float?
+  body       String
+  severity   CommentSeverity @default(SHOULD)
+  resolved   Boolean         @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  replies CommentReply[]
+
+  @@index([versionId])
+}
+
+model CommentReply {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model StatusEvent {
+  id        String            @id @default(cuid())
+  assetId   String
+  asset     Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?             @relation(fields: [userId], references: [id])
+  from      ProductionStatus?
+  to        ProductionStatus
+  reason    String?
+  createdAt DateTime          @default(now())
+
+  @@index([assetId, createdAt])
+}
+
+// ─── Meta (solo lectura) ─────────────────────────────────────────────────────
+
+model MetaConnection {
+  id             String    @id @default(cuid())
+  name           String
+  tokenEncrypted String
+  tokenLast4     String
+  lastCheckedAt  DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+
+  adAccounts AdAccount[]
+}
+
+model AdAccount {
+  id           String         @id @default(cuid())
+  connectionId String
+  connection   MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  accountId    String         @unique // act_123
+  name         String
+  currency     String         @default("USD")
+  enabled      Boolean        @default(false)
+  lastSyncAt   DateTime?
+}
+
+/// Todos los anuncios que el sync ha visto, tengan token o no.
+model MetaAd {
+  id          String   @id @default(cuid())
+  adId        String   @unique
+  accountId   String
+  name        String
+  adsetId     String?
+  campaignId  String?
+  ignored     Boolean  @default(false)
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  deployment Deployment?
+}
+
+model Deployment {
+  id        String           @id @default(cuid())
+  adId      String           @unique
+  ad        MetaAd           @relation(fields: [adId], references: [adId])
+  versionId String
+  version   Version          @relation(fields: [versionId], references: [id])
+  assetId   String
+  asset     Asset            @relation(fields: [assetId], references: [id])
+  source    DeploymentSource
+  createdAt DateTime         @default(now())
+
+  @@index([assetId])
+}
+
+model PerformanceDaily {
+  id           String   @id @default(cuid())
+  adId         String
+  date         DateTime @db.Date
+  spendCents   Int      @default(0)
+  impressions  Int      @default(0)
+  clicks       Int      @default(0)
+  videoPlays3s Int      @default(0)
+  thruplays    Int      @default(0)
+  p25          Int      @default(0)
+  p50          Int      @default(0)
+  p75          Int      @default(0)
+  p100         Int      @default(0)
+  /// Crudo de Meta: { action_type: valor }. Las conversiones se calculan según la oferta.
+  actions      Json     @default("{}")
+  actionValues Json     @default("{}")
+  updatedAt    DateTime @updatedAt
+
+  @@unique([adId, date])
+  @@index([date])
+}
+
+model SyncRun {
+  id         String     @id @default(cuid())
+  kind       String // meta-sync | winner-engine
+  status     SyncStatus @default(RUNNING)
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+  stats      Json       @default("{}")
+  error      String?
+
+  @@index([kind, startedAt])
+}
+
+// ─── Motor de winners ────────────────────────────────────────────────────────
+
+/// offerId null = regla global por defecto.
+model WinnerRule {
+  id                     String  @id @default(cuid())
+  offerId                String? @unique
+  offer                  Offer?  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  winnerMaxCpaPct        Int     @default(80)
+  winnerMinConversions   Int     @default(10)
+  winnerMinSpendMult     Float   @default(2)
+  loserMinSpendMult      Float   @default(3)
+  loserMinCpaPct         Int     @default(130)
+  loserZeroConvSpendMult Float   @default(2)
+  inconclusiveDays       Int     @default(14)
+  /// Gate de calidad opcional (porcentaje, ej. 25 = 25 %).
+  minHookRatePct         Float?
+}
+
+model WinnerEvaluation {
+  id        String            @id @default(cuid())
+  assetId   String
+  asset     Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  previous  PerformanceStatus
+  result    PerformanceStatus
+  reason    String
+  metrics   Json
+  createdAt DateTime          @default(now())
+
+  @@index([assetId, createdAt])
+}
+
+// ─── Transversal ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String    @default("")
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+/// Configuración editable desde la app (p. ej. clave de IA). Los secretos van cifrados.
+model AppSetting {
+  key       String   @id
+  value     String
+  encrypted Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}

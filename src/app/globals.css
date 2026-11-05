@@ -1,0 +1,195 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-figtree);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: var(--font-figtree);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-row-hover: var(--row-hover);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Paleta inspirada en boards de trabajo (estilo Monday). */
+:root {
+  --background: #ffffff;
+  --foreground: #323338;
+  --surface: #f6f7fb;
+  --row-hover: #f5f6f8;
+  --card: #ffffff;
+  --card-foreground: #323338;
+  --popover: #ffffff;
+  --popover-foreground: #323338;
+  --primary: #0073ea;
+  --primary-foreground: #ffffff;
+  --secondary: #e6e9ef;
+  --secondary-foreground: #323338;
+  --muted: #f0f1f5;
+  --muted-foreground: #676879;
+  --accent: #dcebfe;
+  --accent-foreground: #0060b9;
+  --destructive: #d83a52;
+  --border: #e1e4ec;
+  --input: #c3c6d4;
+  --ring: #0073ea;
+  --chart-1: #0073ea;
+  --chart-2: #00c875;
+  --chart-3: #fdab3d;
+  --chart-4: #a25ddc;
+  --chart-5: #df2f4a;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #323338;
+  --sidebar-primary: #0073ea;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dcebfe;
+  --sidebar-accent-foreground: #0060b9;
+  --sidebar-border: #e1e4ec;
+  --sidebar-ring: #0073ea;
+
+  /* Estados. Paleta propia, en tonos 600–700: profundos y de saturación
+     pareja, para que el tablero se lea como un conjunto y no como semáforos.
+     El texto va en blanco salvo en «sin lanzar», que es un estado vacío.
+     «Editando» usa naranja quemado en vez de ámbar, porque el ámbar oscuro
+     que exige la letra blanca se lee marrón; y «cambios pedidos» va en
+     carmesí, no en rojo, para no confundirse con ese naranja de un vistazo.
+     Todos pasan 4.5:1. */
+  --status-done: #15803d;
+  --status-working: #c2410c;
+  --status-review: #1d4ed8;
+  --status-stuck: #be123c;
+  --status-brief: #64748b;
+  --status-testing: #6d28d9;
+  --status-rejected: #334155;
+  --status-muted: #475569;
+  --status-empty: #e2e8f0;
+
+  --status-done-fg: #ffffff;
+  --status-working-fg: #ffffff;
+  --status-review-fg: #ffffff;
+  --status-stuck-fg: #ffffff;
+  --status-brief-fg: #ffffff;
+  --status-testing-fg: #ffffff;
+  --status-rejected-fg: #ffffff;
+  --status-muted-fg: #ffffff;
+  --status-empty-fg: #334155;
+  /* Prioridad: tintes suaves. El color fuerte es el del estado; si ambas
+     columnas gritan, el tablero deja de tener jerarquía. */
+  --prio-high: #ffe4e6;
+  --prio-high-fg: #9f1239;
+  --prio-med: #e0e7ff;
+  --prio-med-fg: #3730a3;
+  --prio-low: #f1f5f9;
+  --prio-low-fg: #475569;
+}
+
+.dark {
+  --background: #181b34;
+  --foreground: #d5d8df;
+  --surface: #1f2240;
+  --row-hover: #252a4a;
+  --card: #292f4c;
+  --card-foreground: #d5d8df;
+  --popover: #30324e;
+  --popover-foreground: #d5d8df;
+  --primary: #0073ea;
+  --primary-foreground: #ffffff;
+  --secondary: #393b53;
+  --secondary-foreground: #d5d8df;
+  --muted: #30324e;
+  --muted-foreground: #9699a6;
+  --accent: #133774;
+  --accent-foreground: #cce5ff;
+  --destructive: #e2445c;
+  --border: #3a3d5c;
+  --input: #4b4e69;
+  --ring: #0073ea;
+  --sidebar: #1f2240;
+  --sidebar-foreground: #d5d8df;
+  --sidebar-primary: #0073ea;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #133774;
+  --sidebar-accent-foreground: #cce5ff;
+  --sidebar-border: #3a3d5c;
+  --sidebar-ring: #0073ea;
+  /* Los tonos 600–700 aguantan bien el fondo oscuro; solo el estado vacío
+     necesita invertirse para no brillar. */
+  --status-empty: #3b4260;
+  --status-empty-fg: #d5d8df;
+  --prio-high: #4c1d24;
+  --prio-high-fg: #fecdd3;
+  --prio-med: #2a2f5c;
+  --prio-med-fg: #c7d2fe;
+  --prio-low: #2b2f4a;
+  --prio-low-fg: #cbd5e1;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Celda de estado llena (Monday). */
+@utility status-cell {
+  @apply flex h-full w-full items-center justify-center px-2 text-[13px] font-medium transition-[filter] select-none;
+  &:hover {
+    filter: brightness(0.93);
+  }
+}
+
+/* Revisión: pantalla oscura. */
+.review-surface {
+  background: #0f1020;
+  color: #e6e7ef;
+}
