@@ -172,6 +172,7 @@ Los puertos se eligen para no chocar con otros proyectos locales y se pueden cam
 |---|---|---|
 | `app` | build del repo, `npm run dev` | Código montado como volumen (hot reload) |
 | `worker` | mismo build + ffmpeg, `npm run worker` | Concurrencia 1 para ffmpeg |
+| `transcriber` | build de `transcriber/` (Python 3.12 + faster-whisper + ffmpeg) | Extractor de guion. Sin puerto publicado ni volumen; solo la red de Docker. Ver §8.3d |
 | `postgres` | `postgres:16-alpine` | Volumen persistente + healthcheck |
 | `redis` | `redis:7-alpine` | Volumen persistente + healthcheck |
 | `minio` | `minio/minio` | Consola en :9001 |
@@ -310,6 +311,13 @@ MAX_UPLOAD_MB=2048
 
 `S3_PUBLIC_ENDPOINT` existe porque el navegador no resuelve `minio`; las URLs firmadas deben apuntar a `localhost`.
 
+```ini
+# Extractor de guion
+TRANSCRIBER_URL=http://transcriber:8000
+MAX_SCRIPT_MB=500
+MAX_SCRIPT_MINUTES=30
+```
+
 ---
 
 ## 7. Decisiones pendientes
@@ -381,7 +389,19 @@ Tests automáticos (`npm test`): 28 casos de estados, permisos, token, ad name, 
 - **Menú ⋯** del creativo junto a su código, siempre visible; los del concepto con su color.
 - `getLookups` ya no manda CPA objetivo ni payout de las ofertas al navegador (llegaba también a editores).
 
+### 8.3d Noviembre 2026 · extractor de guion
+
+Herramienta **independiente** de los creativos (rama `script-extract`): se sube un video y se descarga el guion. No guarda nada.
+
+- **Servicio `transcriber/`** (Python, FastAPI, faster-whisper modelo `base` en CPU int8, ffmpeg del sistema). `POST /transcribe` recibe el archivo como cuerpo crudo, lo guarda en una carpeta temporal, extrae el audio (mono 16 kHz, con corrección de canales en antifase), transcribe con detección automática de idioma y devuelve el texto con segmentos. El video se borra en cuanto hay audio y la carpeta entera en un `finally`; al arrancar se limpia lo que haya quedado de un corte. Una transcripción a la vez (la segunda recibe 429). El modelo se descarga al construir la imagen y en marcha no sale a internet.
+- **Ruta `POST /api/script`** (`src/app/api/script/route.ts`): comprueba sesión y permiso `script.extract` (propietario, responsable creativo y editor) y reenvía el cuerpo en streaming al servicio. **Excepción a «los archivos no pasan por Next.js»**: sin almacenamiento intermedio, el video tiene que viajar por la app. Está excluida del `proxy` (que limita el cuerpo) y comprueba la sesión ella misma.
+- **Pantalla `/script`** (`src/components/script-extractor.tsx`): subida con progreso, resultado en pantalla, copiar texto y descarga en TXT, SRT, VTT y JSON. Los formatos son lógica pura en `src/lib/script-export.ts` (con tests). El resultado vive solo en el navegador.
+- **Límites:** `MAX_SCRIPT_MB` (500) y `MAX_SCRIPT_MINUTES` (30), aplicados por la app y por el servicio.
+- **Producción:** el compose del servidor (`/opt/apps/creative/`) tiene que añadir el servicio `transcriber` (build desde `transcriber/`) y `TRANSCRIBER_URL` en `app`. Necesita unos 1,5 GB de RAM libres y unos 2 GB de disco para la imagen. Si hay un proxy inverso delante, su límite de cuerpo y su tiempo de espera deben cubrir un video de 500 MB y varios minutos de transcripción.
+
 ### 8.4 Pendiente
+
+- **Extractor de guion:** probarlo con un video real en Docker y desplegarlo (compose de producción, RAM del servidor y límites del proxy inverso).
 
 - Probar el sync con un token real de Meta y confirmar qué `action_type` es el FTD de cada oferta.
 - Validar las reglas de winner por defecto con Victor.

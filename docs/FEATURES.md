@@ -348,6 +348,14 @@ Formato de cada característica: **ID · nombre · fase**, seguido de su descrip
 - **F-1504 · Atajos de teclado · F1.** En la revisión y en la navegación principal.
 - **F-1505 · Idioma de la interfaz · F1.** Español. El contenido de los creativos puede estar en cualquier idioma.
 
+### M16 · Extractor de guion
+
+Herramienta independiente: no se relaciona con conceptos, creativos ni versiones.
+
+- **F-1601 · Extraer el guion de un video · F1.** Pantalla «Extractor de guion» (`/script`) para propietario, responsable creativo y editor. Se sube un video o audio (máximo 500 MB y 30 minutos) y se obtiene el texto completo con marcas de tiempo. El idioma se detecta solo. Se procesa un archivo a la vez.
+- **F-1602 · Descarga y copia · F1.** Copiar el texto y descargar en TXT, SRT, VTT o JSON.
+- **F-1603 · Sin almacenamiento · F1.** El archivo y su audio se borran al terminar, también si falla. No se guarda el video ni el guion; el resultado solo está en la pantalla. No usa S3 ni la base de datos y no escribe en `Asset.script`.
+
 ---
 
 ## 4. Fuera de alcance (≥ 90 días o nunca)

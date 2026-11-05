@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckSquare,
   Clapperboard,
+  FileText,
   Home,
   LayoutGrid,
   Link2Off,
@@ -25,6 +26,7 @@ const ITEMS: Item[] = [
   { href: "/review", label: "Revisión", icon: Clapperboard, roles: ["OWNER", "MANAGER"] },
   { href: "/launch", label: "Lanzamiento", icon: Rocket, roles: ["OWNER", "MANAGER", "BUYER"] },
   { href: "/unassigned", label: "Códigos sin creativo", icon: Link2Off, roles: ["OWNER", "MANAGER", "BUYER"] },
+  { href: "/script", label: "Extractor de guion", icon: FileText, roles: ["OWNER", "MANAGER", "EDITOR"] },
   { href: "/performance", label: "Rendimiento", icon: BarChart3, roles: ["OWNER", "MANAGER", "BUYER"] },
 ]
 

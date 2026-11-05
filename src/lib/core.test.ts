@@ -61,6 +61,13 @@ describe("permisos", () => {
     assert.equal(can(manager, "settings.manage"), false)
   })
 
+  it("el extractor de guion es para owner, manager y editor, no para el buyer", () => {
+    assert.equal(can(owner, "script.extract"), true)
+    assert.equal(can(manager, "script.extract"), true)
+    assert.equal(can(editor, "script.extract"), true)
+    assert.equal(can(buyer, "script.extract"), false)
+  })
+
   it("visibilidad de assets por rol", () => {
     const mine = { editorId: "e", productionStatus: "IN_PROGRESS" }
     const other = { editorId: "x", productionStatus: "APPROVED" }

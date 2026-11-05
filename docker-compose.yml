@@ -19,6 +19,7 @@ x-app: &app
     DATABASE_URL: postgresql://${POSTGRES_USER:-creative}:${POSTGRES_PASSWORD:-creative}@postgres:5432/${POSTGRES_DB:-creative_loop}
     REDIS_URL: redis://redis:6379
     S3_ENDPOINT: http://minio:9000
+    TRANSCRIBER_URL: http://transcriber:8000
   volumes:
     - ./:/app
     - app_node_modules:/app/node_modules
@@ -48,6 +49,20 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+
+  # Extractor de guion (faster-whisper). Sin puerto publicado: solo la app lo alcanza.
+  # No guarda nada: los archivos temporales se borran al terminar cada petición.
+  transcriber:
+    build: ./transcriber
+    restart: unless-stopped
+    environment:
+      MAX_SCRIPT_MB: ${MAX_SCRIPT_MB:-500}
+      MAX_SCRIPT_MINUTES: ${MAX_SCRIPT_MINUTES:-30}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:16-alpine

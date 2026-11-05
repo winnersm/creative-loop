@@ -17,6 +17,7 @@ export type Action =
   | "money.view"
   | "launch.manage"
   | "performance.override"
+  | "script.extract" // extractor de guion (herramienta independiente)
 
 const MATRIX: Record<Action, Role[]> = {
   "settings.manage": ["OWNER"],
@@ -31,6 +32,7 @@ const MATRIX: Record<Action, Role[]> = {
   "money.view": ["OWNER", "MANAGER", "BUYER"],
   "launch.manage": ["OWNER", "MANAGER", "BUYER"],
   "performance.override": ["OWNER"],
+  "script.extract": ["OWNER", "MANAGER", "EDITOR"],
 }
 
 export function can(actor: Actor, action: Action): boolean {
