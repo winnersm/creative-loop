@@ -55,3 +55,8 @@ README.local.md
 
 # graphify: grafo de conocimiento generado en local
 graphify-out/
+
+# Skills de agentes instaladas en local (npx skills add)
+.agents/
+.claude/
+skills-lock.json

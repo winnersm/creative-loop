@@ -1,8 +1,9 @@
 "use client"
 
-import { AlignLeft, Copy, Download, FileText, ListVideo, Loader2, Search, Upload } from "lucide-react"
+import { AlignLeft, Copy, Download, FileText, ListVideo, Search, Upload } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { ScriptProcessing } from "@/components/script-processing"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -11,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   activeSegment,
   clock,
@@ -154,7 +154,7 @@ export function ScriptExtractor({ maxMb }: { maxMb: number }) {
       <section className="space-y-3 lg:sticky lg:top-6">
         {media ? (
           <>
-            <div className="overflow-hidden rounded-lg border bg-black">
+            <div className="relative overflow-hidden rounded-lg border bg-black">
               <video
                 key={media.url}
                 ref={video}
@@ -168,6 +168,7 @@ export function ScriptExtractor({ maxMb }: { maxMb: number }) {
                   if (result) setActive(activeSegment(result.segments, e.currentTarget.currentTime)?.id ?? null)
                 }}
               />
+              {phase.name === "transcribing" && <div aria-hidden className="script-scan" />}
             </div>
             {!playable && (
               <p className="text-xs text-muted-foreground">
@@ -226,11 +227,7 @@ export function ScriptExtractor({ maxMb }: { maxMb: number }) {
             onCopy={() => void copy(result.text)}
           />
         ) : busy ? (
-          <div className="space-y-3 p-5" aria-hidden>
-            {[11, 9, 12, 8, 10, 7].map((w, i) => (
-              <Skeleton key={i} className="h-4" style={{ width: `${w * 8}%` }} />
-            ))}
-          </div>
+          <ScriptProcessing progress={phase.name === "uploading" ? phase.progress : null} />
         ) : phase.name === "error" ? (
           <Message title="No se pudo extraer el guion" alert>
             {phase.message}
@@ -255,7 +252,7 @@ function Actions({ phase, onStart, onCancel }: { phase: Phase; onStart: () => vo
     )
   return (
     <div className="flex items-center gap-3">
-      {phase.name === "uploading" ? (
+      {phase.name === "uploading" && (
         <>
           <div
             role="progressbar"
@@ -267,12 +264,8 @@ function Actions({ phase, onStart, onCancel }: { phase: Phase; onStart: () => vo
           </div>
           <span className="text-sm tabular-nums text-muted-foreground">{Math.round(phase.progress * 100)} %</span>
         </>
-      ) : (
-        <span role="status" className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Transcribiendo… puede tardar un par de minutos.
-        </span>
       )}
-      <Button size="sm" variant="outline" onClick={onCancel}>
+      <Button size="sm" variant="outline" className={phase.name === "uploading" ? "" : "w-full"} onClick={onCancel}>
         Cancelar
       </Button>
     </div>
@@ -341,8 +334,8 @@ function Result({
   return (
     <>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-b p-4 sm:grid-cols-4">
-        {stats.map(([label, value]) => (
-          <div key={label}>
+        {stats.map(([label, value], i) => (
+          <div key={label} className="script-enter" style={{ "--i": i } as React.CSSProperties}>
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="text-lg font-semibold tabular-nums">{value}</dd>
           </div>
@@ -395,7 +388,11 @@ function Result({
         </DropdownMenu>
       </div>
 
-      <div ref={list} className="relative min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={list}
+        className="script-enter relative min-h-0 flex-1 overflow-y-auto"
+        style={{ "--i": 4 } as React.CSSProperties}
+      >
         {view === "text" ? (
           <p className="p-5 text-sm leading-relaxed whitespace-pre-wrap">
             <Marked text={result.text} query={query} />

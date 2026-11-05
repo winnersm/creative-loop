@@ -193,3 +193,126 @@
   background: #0f1020;
   color: #e6e7ef;
 }
+
+/* Extractor de guion: onda de voz que se convierte en texto mientras se procesa el video. */
+:root {
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.script-bar {
+  opacity: 0.22;
+  transition: opacity 200ms var(--motion-ease-out);
+  animation: script-bar-rest 1400ms var(--motion-ease-in-out) infinite;
+}
+.script-bar[data-lit="true"] {
+  opacity: 1;
+}
+.script-wave[data-active="true"] .script-bar {
+  animation-name: script-bar-speak;
+  animation-duration: 1100ms;
+}
+@keyframes script-bar-rest {
+  0%,
+  100% {
+    transform: scaleY(0.12);
+  }
+  50% {
+    transform: scaleY(0.3);
+  }
+}
+@keyframes script-bar-speak {
+  0%,
+  100% {
+    transform: scaleY(0.15);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.script-line {
+  opacity: 0;
+}
+.script-wave[data-active="true"] ~ .script-lines .script-line {
+  animation: script-line-write 5000ms var(--motion-ease-out) infinite both;
+}
+@keyframes script-line-write {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 1;
+  }
+  30%,
+  88% {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0);
+    opacity: 0;
+  }
+}
+
+.script-scan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.script-scan::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 60%,
+    color-mix(in oklch, var(--primary) 40%, transparent) 99%,
+    #ffffff 100%
+  );
+  transform: translateY(-100%);
+  animation: script-scan 2600ms linear infinite;
+}
+@keyframes script-scan {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.script-enter {
+  animation: script-enter 240ms var(--motion-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 50ms);
+}
+@keyframes script-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .script-bar,
+  .script-wave[data-active="true"] .script-bar {
+    transform: scaleY(0.6);
+    animation: none;
+  }
+  .script-wave[data-active="true"] ~ .script-lines .script-line {
+    opacity: 1;
+    animation: script-pulse 2000ms ease infinite;
+  }
+  .script-scan::before {
+    display: none;
+  }
+  .script-enter {
+    animation-name: script-fade;
+  }
+}
+@keyframes script-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes script-fade {
+  from {
+    opacity: 0;
+  }
+}
