@@ -70,10 +70,10 @@ export function toJson(r: ScriptResult, filename: string): string {
 }
 
 export const FORMATS: Record<ScriptFormat, { label: string; mime: string }> = {
-  txt: { label: "TXT", mime: "text/plain" },
-  srt: { label: "SRT", mime: "application/x-subrip" },
-  vtt: { label: "VTT", mime: "text/vtt" },
-  json: { label: "JSON", mime: "application/json" },
+  txt: { label: "Texto (TXT)", mime: "text/plain" },
+  srt: { label: "Subtítulos (SRT)", mime: "application/x-subrip" },
+  vtt: { label: "Subtítulos web (VTT)", mime: "text/vtt" },
+  json: { label: "Datos (JSON)", mime: "application/json" },
 }
 
 export function render(format: ScriptFormat, r: ScriptResult, filename: string): string {
@@ -87,6 +87,55 @@ export function render(format: ScriptFormat, r: ScriptResult, filename: string):
     case "json":
       return toJson(r, filename)
   }
+}
+
+/** Frase que suena en el segundo t, o null en los silencios entre frases. */
+export function activeSegment(segments: ScriptSegment[], t: number): ScriptSegment | null {
+  return segments.find((s) => t >= s.start && t < s.end) ?? null
+}
+
+/** «es» → «Español». Si el código no se reconoce, se devuelve tal cual. */
+export function languageName(code: string): string {
+  try {
+    const name = new Intl.DisplayNames(["es"], { type: "language" }).of(code) ?? code
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  } catch {
+    return code
+  }
+}
+
+// Sin mayúsculas ni acentos: buscar «guion» encuentra «Guión».
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
+
+export function filterSegments(segments: ScriptSegment[], query: string): ScriptSegment[] {
+  const q = fold(query.trim())
+  return q ? segments.filter((s) => fold(s.text).includes(q)) : segments
+}
+
+/** Parte el texto en tramos para resaltar las coincidencias con la búsqueda. */
+export function splitMatches(text: string, query: string): { text: string; match: boolean }[] {
+  const q = fold(query.trim())
+  if (!q) return [{ text, match: false }]
+  const chars = Array.from(text)
+  // Un carácter puede ocupar más de uno al normalizar: se guarda de cuál viene cada posición.
+  let folded = ""
+  const origin: number[] = []
+  chars.forEach((c, i) => {
+    const f = fold(c)
+    for (let k = 0; k < f.length; k++) origin.push(i)
+    folded += f
+  })
+  const parts: { text: string; match: boolean }[] = []
+  let cursor = 0
+  for (let at = folded.indexOf(q); at !== -1; at = folded.indexOf(q, at + q.length)) {
+    const start = origin[at]
+    const end = origin[at + q.length - 1] + 1
+    if (start > cursor) parts.push({ text: chars.slice(cursor, start).join(""), match: false })
+    parts.push({ text: chars.slice(start, end).join(""), match: true })
+    cursor = end
+  }
+  if (cursor < chars.length) parts.push({ text: chars.slice(cursor).join(""), match: false })
+  return parts
 }
 
 /** «mi video.final.mp4» → «mi video.final.srt». */

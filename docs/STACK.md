@@ -314,7 +314,7 @@ MAX_UPLOAD_MB=2048
 ```ini
 # Extractor de guion
 TRANSCRIBER_URL=http://transcriber:8000
-MAX_SCRIPT_MB=500
+MAX_SCRIPT_MB=100
 MAX_SCRIPT_MINUTES=30
 ```
 
@@ -395,9 +395,9 @@ Herramienta **independiente** de los creativos (rama `script-extract`): se sube 
 
 - **Servicio `transcriber/`** (Python, FastAPI, faster-whisper modelo `base` en CPU int8, ffmpeg del sistema). `POST /transcribe` recibe el archivo como cuerpo crudo, lo guarda en una carpeta temporal, extrae el audio (mono 16 kHz, con corrección de canales en antifase), transcribe con detección automática de idioma y devuelve el texto con segmentos. El video se borra en cuanto hay audio y la carpeta entera en un `finally`; al arrancar se limpia lo que haya quedado de un corte. Una transcripción a la vez (la segunda recibe 429). El modelo se descarga al construir la imagen y en marcha no sale a internet.
 - **Ruta `POST /api/script`** (`src/app/api/script/route.ts`): comprueba sesión y permiso `script.extract` (propietario, responsable creativo y editor) y reenvía el cuerpo en streaming al servicio. **Excepción a «los archivos no pasan por Next.js»**: sin almacenamiento intermedio, el video tiene que viajar por la app. Está excluida del `proxy` (que limita el cuerpo) y comprueba la sesión ella misma.
-- **Pantalla `/script`** (`src/components/script-extractor.tsx`): subida con progreso, resultado en pantalla, copiar texto y descarga en TXT, SRT, VTT y JSON. Los formatos son lógica pura en `src/lib/script-export.ts` (con tests). El resultado vive solo en el navegador.
-- **Límites:** `MAX_SCRIPT_MB` (500) y `MAX_SCRIPT_MINUTES` (30), aplicados por la app y por el servicio.
-- **Producción:** el compose del servidor (`/opt/apps/creative/`) tiene que añadir el servicio `transcriber` (build desde `transcriber/`) y `TRANSCRIBER_URL` en `app`. Necesita unos 1,5 GB de RAM libres y unos 2 GB de disco para la imagen. Si hay un proxy inverso delante, su límite de cuerpo y su tiempo de espera deben cubrir un video de 500 MB y varios minutos de transcripción.
+- **Pantalla `/script`** (`src/components/script-extractor.tsx`): subida con progreso, reproductor sincronizado con el guion (el video se reproduce desde el archivo local con una URL `blob:`, sin pedirlo al servidor), búsqueda, vista por frases o texto corrido, copiar texto y descarga en TXT, SRT, VTT y JSON. Los formatos son lógica pura en `src/lib/script-export.ts` (con tests). El resultado vive solo en el navegador.
+- **Límites:** `MAX_SCRIPT_MB` (100) y `MAX_SCRIPT_MINUTES` (30), aplicados por la app y por el servicio. Los 100 MB vienen de Cloudflare, que está delante de producción y responde 413 por encima de ese tamaño. Cloudflare también corta si la respuesta tarda más de unos 100 s, así que los videos largos pueden fallar aunque pesen poco.
+- **Producción:** el compose del servidor (`/opt/apps/creative/`) tiene que añadir el servicio `transcriber` (build desde `transcriber/`) y `TRANSCRIBER_URL` en `app`. Necesita unos 1,5 GB de RAM libres y unos 2 GB de disco para la imagen. Si hay un proxy inverso delante, su límite de cuerpo y su tiempo de espera deben cubrir el máximo configurado.
 
 ### 8.4 Pendiente
 

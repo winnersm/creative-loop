@@ -1,6 +1,17 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { clock, downloadName, render, type ScriptResult, toSrt, toVtt } from "./script-export"
+import {
+  activeSegment,
+  clock,
+  downloadName,
+  filterSegments,
+  languageName,
+  render,
+  type ScriptResult,
+  splitMatches,
+  toSrt,
+  toVtt,
+} from "./script-export"
 
 const result: ScriptResult = {
   language: "es",
@@ -50,6 +61,38 @@ describe("extractor de guion", () => {
     const json = JSON.parse(render("json", result, "video.mp4"))
     assert.equal(json.filename, "video.mp4")
     assert.equal(json.segments.length, 2)
+  })
+
+  it("encuentra la frase que suena y ninguna en los silencios", () => {
+    assert.equal(activeSegment(result.segments, 1)?.id, 1)
+    assert.equal(activeSegment(result.segments, 2.5), null)
+    assert.equal(activeSegment(result.segments, 3662)?.id, 2)
+  })
+
+  it("escribe el idioma en español", () => {
+    assert.equal(languageName("es"), "Español")
+    assert.equal(languageName("en"), "Inglés")
+    assert.equal(languageName("no es un código"), "no es un código")
+  })
+
+  it("busca sin distinguir mayúsculas ni acentos", () => {
+    const segs = [
+      { id: 1, start: 0, end: 1, text: "El Guión final" },
+      { id: 2, start: 1, end: 2, text: "Otra frase" },
+    ]
+    assert.deepEqual(filterSegments(segs, " guion ").map((s) => s.id), [1])
+    assert.equal(filterSegments(segs, "").length, 2)
+  })
+
+  it("resalta cada coincidencia conservando el texto original", () => {
+    assert.deepEqual(splitMatches("El Guión y el guion", "guion"), [
+      { text: "El ", match: false },
+      { text: "Guión", match: true },
+      { text: " y el ", match: false },
+      { text: "guion", match: true },
+    ])
+    assert.deepEqual(splitMatches("hola", ""), [{ text: "hola", match: false }])
+    assert.deepEqual(splitMatches("hola", "xyz"), [{ text: "hola", match: false }])
   })
 
   it("cambia la extensión del archivo descargado", () => {

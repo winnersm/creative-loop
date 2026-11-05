@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from audio import AudioError, extract_audio
 from transcriber import MODEL_NAME, transcribe
 
-MAX_BYTES = int(os.environ.get("MAX_SCRIPT_MB", "500")) * 1024 * 1024
+MAX_BYTES = int(os.environ.get("MAX_SCRIPT_MB", "100")) * 1024 * 1024
 MAX_SECONDS = int(os.environ.get("MAX_SCRIPT_MINUTES", "30")) * 60
 WORK_ROOT = Path(tempfile.gettempdir()) / "script-extract"
 

@@ -56,7 +56,7 @@ services:
     build: ./transcriber
     restart: unless-stopped
     environment:
-      MAX_SCRIPT_MB: ${MAX_SCRIPT_MB:-500}
+      MAX_SCRIPT_MB: ${MAX_SCRIPT_MB:-100}
       MAX_SCRIPT_MINUTES: ${MAX_SCRIPT_MINUTES:-30}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

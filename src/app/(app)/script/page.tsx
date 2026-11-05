@@ -11,13 +11,10 @@ export default async function ScriptPage() {
     <div>
       <PageHeader
         title="Extractor de guion"
-        description="Sube un video y descarga lo que se dice, con marcas de tiempo. El archivo se borra al terminar y no queda nada guardado."
+        description="El archivo se borra al terminar y no hay respaldos en el servidor, la herramienta solo sirve para extraer el script."
       />
       <div className="p-6">
-        <ScriptExtractor
-          maxMb={Number(process.env.MAX_SCRIPT_MB ?? 500)}
-          maxMinutes={Number(process.env.MAX_SCRIPT_MINUTES ?? 30)}
-        />
+        <ScriptExtractor maxMb={Number(process.env.MAX_SCRIPT_MB ?? 100)} />
       </div>
     </div>
   )

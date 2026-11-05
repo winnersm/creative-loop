@@ -1,16 +1,29 @@
 "use client"
 
-import { Copy, Download, FileText, Loader2, Upload, X } from "lucide-react"
-import { useRef, useState } from "react"
+import { AlignLeft, Copy, Download, FileText, ListVideo, Loader2, Search, Upload } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  activeSegment,
   clock,
   downloadName,
+  filterSegments,
   FORMATS,
+  languageName,
   render,
   type ScriptFormat,
   type ScriptResult,
+  type ScriptSegment,
+  splitMatches,
 } from "@/lib/script-export"
 
 type Phase =
@@ -18,6 +31,7 @@ type Phase =
   | { name: "uploading"; progress: number }
   | { name: "transcribing" }
   | { name: "done"; result: ScriptResult }
+  | { name: "error"; message: string }
 
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1)
 
@@ -29,49 +43,63 @@ function send(file: File, onProgress: (p: number) => void, onUploaded: () => voi
     xhr.setRequestHeader("content-type", "application/octet-stream")
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
     xhr.upload.onload = onUploaded
-    xhr.onerror = () => reject(new Error("Se perdió la conexión"))
-    xhr.onabort = () => reject(new Error("Cancelado"))
+    xhr.onerror = () => reject(new Error("Se perdió la conexión. Inténtalo de nuevo."))
+    xhr.onabort = () => reject(new DOMException("Cancelado", "AbortError"))
     xhr.onload = () => {
       let data: (ScriptResult & { error?: string }) | null = null
       try {
         data = JSON.parse(xhr.responseText)
       } catch {}
       if (xhr.status >= 200 && xhr.status < 300 && data) resolve(data)
-      else reject(new Error(data?.error ?? "No se pudo extraer el guion"))
+      // 524: Cloudflare se cansó de esperar la respuesta; llega como HTML, sin JSON.
+      else if (xhr.status === 524) reject(new Error("El video tarda demasiado en procesarse. Prueba con uno más corto."))
+      else reject(new Error(data?.error ?? "No se pudo extraer el guion."))
     }
     xhr.send(file)
   })
   return { promise, cancel: () => xhr.abort() }
 }
 
-export function ScriptExtractor({ maxMb, maxMinutes }: { maxMb: number; maxMinutes: number }) {
-  const [file, setFile] = useState<File | null>(null)
+export function ScriptExtractor({ maxMb }: { maxMb: number }) {
+  const [media, setMedia] = useState<{ file: File; url: string } | null>(null)
   const [phase, setPhase] = useState<Phase>({ name: "idle" })
   const [dragging, setDragging] = useState(false)
+  const [playable, setPlayable] = useState(true)
+  const [active, setActive] = useState<number | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  const video = useRef<HTMLVideoElement>(null)
 
   const busy = phase.name === "uploading" || phase.name === "transcribing"
+  const result = phase.name === "done" ? phase.result : null
+
+  // El video se reproduce desde el archivo local: no se pide nada al servidor.
+  useEffect(() => {
+    if (!media) return
+    return () => URL.revokeObjectURL(media.url)
+  }, [media])
 
   function pick(f: File | undefined) {
     if (!f) return
     if (!/^(video|audio)\//.test(f.type) && !/\.(mp4|mov|mkv|avi|webm|m4v|mp3|wav|m4a)$/i.test(f.name)) {
-      toast.error("Elige un archivo de video o audio")
+      toast.error("Elige un archivo de video")
       return
     }
     if (f.size > maxMb * 1024 * 1024) {
       toast.error(`El archivo pesa ${mb(f.size)} MB y el máximo es ${maxMb} MB`)
       return
     }
-    setFile(f)
+    setMedia({ file: f, url: URL.createObjectURL(f) })
     setPhase({ name: "idle" })
+    setPlayable(true)
+    setActive(null)
   }
 
   async function start() {
-    if (!file) return
+    if (!media) return
     setPhase({ name: "uploading", progress: 0 })
     const job = send(
-      file,
+      media.file,
       (progress) => setPhase({ name: "uploading", progress }),
       () => setPhase({ name: "transcribing" }),
     )
@@ -79,22 +107,27 @@ export function ScriptExtractor({ maxMb, maxMinutes }: { maxMb: number; maxMinut
     try {
       setPhase({ name: "done", result: await job.promise })
     } catch (e) {
-      setPhase({ name: "idle" })
-      const msg = e instanceof Error ? e.message : "No se pudo extraer el guion"
-      if (msg !== "Cancelado") toast.error(msg)
+      if (e instanceof DOMException && e.name === "AbortError") setPhase({ name: "idle" })
+      else setPhase({ name: "error", message: e instanceof Error ? e.message : "No se pudo extraer el guion." })
     } finally {
       cancelRef.current = null
     }
   }
 
-  function download(format: ScriptFormat, result: ScriptResult) {
-    const blob = new Blob([render(format, result, file?.name ?? "video")], {
-      type: `${FORMATS[format].mime};charset=utf-8`,
-    })
+  function seek(s: ScriptSegment) {
+    const v = video.current
+    if (!v) return
+    v.currentTime = s.start
+    void v.play().catch(() => {})
+  }
+
+  function download(format: ScriptFormat, r: ScriptResult) {
+    const name = media?.file.name ?? "guion"
+    const blob = new Blob([render(format, r, name)], { type: `${FORMATS[format].mime};charset=utf-8` })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = downloadName(file?.name ?? "guion", format)
+    a.download = downloadName(name, format)
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -105,143 +138,295 @@ export function ScriptExtractor({ maxMb, maxMinutes }: { maxMb: number; maxMinut
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div
-        onDragOver={(e) => {
-          e.preventDefault()
-          if (!busy) setDragging(true)
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <input
+        ref={input}
+        type="file"
+        accept="video/*,audio/*"
+        aria-label="Elegir archivo de video"
+        className="hidden"
+        onChange={(e) => {
+          pick(e.target.files?.[0])
+          e.target.value = ""
         }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setDragging(false)
-          if (!busy) pick(e.dataTransfer.files[0])
-        }}
-        className={
-          "rounded-lg border border-dashed p-8 text-center transition-colors " +
-          (dragging ? "border-primary bg-accent/40" : "")
-        }
-      >
-        <input
-          ref={input}
-          type="file"
-          accept="video/*,audio/*"
-          className="hidden"
-          onChange={(e) => {
-            pick(e.target.files?.[0])
-            e.target.value = ""
-          }}
-        />
-        {file ? (
-          <div className="flex items-center justify-center gap-3 text-sm">
-            <FileText className="size-5 text-muted-foreground" />
-            <span className="font-medium">{file.name}</span>
-            <span className="tabular-nums text-muted-foreground">{mb(file.size)} MB</span>
-            {!busy && (
-              <Button size="icon-xs" variant="ghost" aria-label="Quitar archivo" onClick={() => setFile(null)}>
-                <X />
-              </Button>
+      />
+
+      <section className="space-y-3 lg:sticky lg:top-6">
+        {media ? (
+          <>
+            <div className="overflow-hidden rounded-lg border bg-black">
+              <video
+                key={media.url}
+                ref={video}
+                src={media.url}
+                controls
+                playsInline
+                preload="metadata"
+                className="mx-auto max-h-[55dvh] w-full object-contain"
+                onError={() => setPlayable(false)}
+                onTimeUpdate={(e) => {
+                  if (result) setActive(activeSegment(result.segments, e.currentTarget.currentTime)?.id ?? null)
+                }}
+              />
+            </div>
+            {!playable && (
+              <p className="text-xs text-muted-foreground">
+                Tu navegador no puede reproducir este formato, pero el guion se extrae igual.
+              </p>
             )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Upload className="mx-auto size-6 text-muted-foreground" />
-            <p className="text-sm">Arrastra un video aquí o</p>
-            <Button variant="outline" onClick={() => input.current?.click()}>
-              Elegir archivo
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Hasta {maxMb} MB y {maxMinutes} minutos. Se transcribe de uno en uno.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {file && (
-        <div className="flex items-center gap-3">
-          {!busy && <Button onClick={() => void start()}>Extraer guion</Button>}
-          {phase.name === "uploading" && (
-            <>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${Math.round(phase.progress * 100)}%` }}
-                />
-              </div>
-              <span className="text-sm tabular-nums text-muted-foreground">
-                Subiendo {Math.round(phase.progress * 100)} %
+            <div className="flex items-center gap-2 text-sm">
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-medium" title={media.file.name}>
+                {media.file.name}
               </span>
-            </>
-          )}
-          {phase.name === "transcribing" && (
-            <span className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Transcribiendo… puede tardar uno o dos minutos.
-            </span>
-          )}
-          {busy && (
-            <Button variant="outline" onClick={() => cancelRef.current?.()}>
-              Cancelar
-            </Button>
-          )}
-        </div>
-      )}
+              <span className="shrink-0 tabular-nums text-muted-foreground">{mb(media.file.size)} MB</span>
+              {!busy && (
+                <Button size="sm" variant="ghost" onClick={() => input.current?.click()}>
+                  Cambiar
+                </Button>
+              )}
+            </div>
+            <Actions phase={phase} onStart={() => void start()} onCancel={() => cancelRef.current?.()} />
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              pick(e.dataTransfer.files[0])
+            }}
+            className={
+              "flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 text-center transition-colors outline-none hover:border-primary hover:bg-accent/30 focus-visible:ring-3 focus-visible:ring-ring/50 " +
+              (dragging ? "border-primary bg-accent/40" : "")
+            }
+          >
+            <Upload className="size-6 text-muted-foreground" />
+            <span className="text-sm font-medium">Arrastra un video o haz clic para elegirlo</span>
+            <span className="text-xs text-muted-foreground">Máximo {maxMb} MB de video</span>
+          </button>
+        )}
+      </section>
 
-      {phase.name === "done" && (
-        <Result
-          result={phase.result}
-          onDownload={(f) => download(f, phase.result)}
-          onCopy={() => void copy(phase.result.text)}
-        />
-      )}
+      <section className="flex min-h-80 flex-col rounded-lg border bg-card lg:h-[calc(100dvh-13rem)]">
+        {result ? (
+          <Result
+            key={media?.url}
+            result={result}
+            active={active}
+            canSeek={playable}
+            onSeek={seek}
+            onDownload={(f) => download(f, result)}
+            onCopy={() => void copy(result.text)}
+          />
+        ) : busy ? (
+          <div className="space-y-3 p-5" aria-hidden>
+            {[11, 9, 12, 8, 10, 7].map((w, i) => (
+              <Skeleton key={i} className="h-4" style={{ width: `${w * 8}%` }} />
+            ))}
+          </div>
+        ) : phase.name === "error" ? (
+          <Message title="No se pudo extraer el guion" alert>
+            {phase.message}
+          </Message>
+        ) : (
+          <Message title="Aquí aparecerá el guion">
+            {media ? "Pulsa «Extraer guion» para empezar." : "Elige un video para empezar."}
+          </Message>
+        )}
+      </section>
     </div>
+  )
+}
+
+function Actions({ phase, onStart, onCancel }: { phase: Phase; onStart: () => void; onCancel: () => void }) {
+  if (phase.name === "done") return null
+  if (phase.name === "idle" || phase.name === "error")
+    return (
+      <Button size="lg" className="w-full" onClick={onStart}>
+        {phase.name === "error" ? "Reintentar" : "Extraer guion"}
+      </Button>
+    )
+  return (
+    <div className="flex items-center gap-3">
+      {phase.name === "uploading" ? (
+        <>
+          <div
+            role="progressbar"
+            aria-label="Subiendo el video"
+            aria-valuenow={Math.round(phase.progress * 100)}
+            className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary"
+          >
+            <div className="h-full bg-primary transition-all" style={{ width: `${Math.round(phase.progress * 100)}%` }} />
+          </div>
+          <span className="text-sm tabular-nums text-muted-foreground">{Math.round(phase.progress * 100)} %</span>
+        </>
+      ) : (
+        <span role="status" className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Transcribiendo… puede tardar un par de minutos.
+        </span>
+      )}
+      <Button size="sm" variant="outline" onClick={onCancel}>
+        Cancelar
+      </Button>
+    </div>
+  )
+}
+
+function Message({ title, alert, children }: { title: string; alert?: boolean; children: React.ReactNode }) {
+  return (
+    <div role={alert ? "alert" : undefined} className="m-auto max-w-sm p-6 text-center">
+      <p className={"font-medium " + (alert ? "text-destructive" : "")}>{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{children}</p>
+    </div>
+  )
+}
+
+function Marked({ text, query }: { text: string; query: string }) {
+  return splitMatches(text, query).map((p, i) =>
+    p.match ? (
+      <mark key={i} className="rounded-sm bg-accent text-accent-foreground">
+        {p.text}
+      </mark>
+    ) : (
+      p.text
+    ),
   )
 }
 
 function Result({
   result,
+  active,
+  canSeek,
+  onSeek,
   onDownload,
   onCopy,
 }: {
   result: ScriptResult
+  active: number | null
+  canSeek: boolean
+  onSeek: (s: ScriptSegment) => void
   onDownload: (f: ScriptFormat) => void
   onCopy: () => void
 }) {
-  if (!result.segments.length)
-    return <p className="rounded-lg border p-4 text-sm text-muted-foreground">No se detectó voz en el archivo.</p>
+  const [query, setQuery] = useState("")
+  const [view, setView] = useState<"segments" | "text">("segments")
+  const list = useRef<HTMLDivElement>(null)
+  const segments = filterSegments(result.segments, query)
+
+  // Mantiene a la vista la frase que suena, moviendo solo la lista y no la página.
+  useEffect(() => {
+    const box = list.current
+    const row = box?.querySelector<HTMLElement>(`[data-segment="${active}"]`)
+    if (!box || !row) return
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    box.scrollTo({ top: row.offsetTop - box.clientHeight / 3, behavior: reduce ? "auto" : "smooth" })
+  }, [active])
+
+  if (!result.segments.length) return <Message title="No se detectó voz">El archivo no tiene voz que transcribir.</Message>
+
+  const stats = [
+    ["Idioma", languageName(result.language)],
+    ["Confianza", `${Math.round(result.languageProbability * 100)} %`],
+    ["Duración", clock(result.durationSeconds)],
+    ["Palabras", String(result.wordCount)],
+  ]
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Idioma: <b className="text-foreground">{result.language}</b> ({Math.round(result.languageProbability * 100)} %)
-          {" · "}Duración: <b className="tabular-nums text-foreground">{clock(result.durationSeconds)}</b>
-          {" · "}
-          {result.wordCount} palabras
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onCopy}>
-            <Copy /> Copiar texto
-          </Button>
-          {(Object.keys(FORMATS) as ScriptFormat[]).map((f) => (
-            <Button key={f} size="sm" variant="outline" onClick={() => onDownload(f)}>
-              <Download /> {FORMATS[f].label}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div className="rounded-lg border bg-card p-4 text-sm leading-relaxed whitespace-pre-wrap">{result.text}</div>
-      <ul className="divide-y rounded-lg border text-sm">
-        {result.segments.map((s) => (
-          <li key={s.id} className="flex gap-3 px-4 py-2">
-            <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
-              {clock(s.start)} – {clock(s.end)}
-            </span>
-            <span>{s.text}</span>
-          </li>
+    <>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-b p-4 sm:grid-cols-4">
+        {stats.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="text-lg font-semibold tabular-nums">{value}</dd>
+          </div>
         ))}
-      </ul>
-      <p className="text-xs text-muted-foreground">
-        Esto solo existe en esta pantalla: si la cierras, se pierde. Descarga lo que necesites.
-      </p>
-    </div>
+      </dl>
+
+      <div className="flex flex-wrap items-center gap-2 border-b p-3">
+        <div className="relative min-w-44 flex-1">
+          <Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar en el guion"
+            aria-label="Buscar en el guion"
+            className="pl-8"
+          />
+        </div>
+        <div className="flex rounded-lg bg-muted p-0.5">
+          <Button
+            size="sm"
+            variant={view === "segments" ? "outline" : "ghost"}
+            aria-pressed={view === "segments"}
+            onClick={() => setView("segments")}
+          >
+            <ListVideo /> Frases
+          </Button>
+          <Button
+            size="sm"
+            variant={view === "text" ? "outline" : "ghost"}
+            aria-pressed={view === "text"}
+            onClick={() => setView("text")}
+          >
+            <AlignLeft /> Texto
+          </Button>
+        </div>
+        <Button size="sm" variant="outline" onClick={onCopy}>
+          <Copy /> Copiar
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger className={buttonVariants({ size: "sm" })}>
+            <Download /> Descargar
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {(Object.keys(FORMATS) as ScriptFormat[]).map((f) => (
+              <DropdownMenuItem key={f} onClick={() => onDownload(f)}>
+                {FORMATS[f].label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div ref={list} className="relative min-h-0 flex-1 overflow-y-auto">
+        {view === "text" ? (
+          <p className="p-5 text-sm leading-relaxed whitespace-pre-wrap">
+            <Marked text={result.text} query={query} />
+          </p>
+        ) : segments.length ? (
+          <ul className="p-2">
+            {segments.map((s) => (
+              <li key={s.id} data-segment={s.id}>
+                <button
+                  type="button"
+                  disabled={!canSeek}
+                  aria-current={s.id === active ? "true" : undefined}
+                  title={canSeek ? `Ir a ${clock(s.start)}` : undefined}
+                  onClick={() => onSeek(s)}
+                  className={
+                    "flex w-full gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default " +
+                    (s.id === active ? "bg-accent text-accent-foreground" : "enabled:hover:bg-row-hover")
+                  }
+                >
+                  <span className="shrink-0 pt-px text-xs tabular-nums opacity-70">{clock(s.start)}</span>
+                  <span>
+                    <Marked text={s.text} query={query} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Message title="Sin resultados">Ninguna frase contiene «{query.trim()}».</Message>
+        )}
+      </div>
+    </>
   )
 }

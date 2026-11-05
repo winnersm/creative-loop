@@ -7,7 +7,7 @@ import { can } from "@/lib/permissions"
 import { getCurrentUser } from "@/lib/session"
 
 const TRANSCRIBER_URL = process.env.TRANSCRIBER_URL ?? "http://transcriber:8000"
-const MAX_MB = Number(process.env.MAX_SCRIPT_MB ?? 500)
+const MAX_MB = Number(process.env.MAX_SCRIPT_MB ?? 100)
 const TIMEOUT_MS = 20 * 60 * 1000
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status })

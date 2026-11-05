@@ -352,7 +352,7 @@ Formato de cada característica: **ID · nombre · fase**, seguido de su descrip
 
 Herramienta independiente: no se relaciona con conceptos, creativos ni versiones.
 
-- **F-1601 · Extraer el guion de un video · F1.** Pantalla «Extractor de guion» (`/script`) para propietario, responsable creativo y editor. Se sube un video o audio (máximo 500 MB y 30 minutos) y se obtiene el texto completo con marcas de tiempo. El idioma se detecta solo. Se procesa un archivo a la vez.
+- **F-1601 · Extraer el guion de un video · F1.** Pantalla «Extractor de guion» (`/script`) para propietario, responsable creativo y editor. Se sube un video o audio (máximo 100 MB y 30 minutos) y se obtiene el texto completo con marcas de tiempo. El video se reproduce en la misma pantalla desde el equipo del usuario: la frase que suena se resalta y al pulsar una frase salta a ese momento. Se puede buscar dentro del guion. El idioma se detecta solo. Se procesa un archivo a la vez.
 - **F-1602 · Descarga y copia · F1.** Copiar el texto y descargar en TXT, SRT, VTT o JSON.
 - **F-1603 · Sin almacenamiento · F1.** El archivo y su audio se borran al terminar, también si falla. No se guarda el video ni el guion; el resultado solo está en la pantalla. No usa S3 ni la base de datos y no escribe en `Asset.script`.
 
