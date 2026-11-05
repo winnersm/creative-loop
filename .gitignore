@@ -52,3 +52,6 @@ README.local.md
 
 # Configuración local de herramientas de agentes (identifica proyectos externos)
 .mcp.json
+
+# graphify: grafo de conocimiento generado en local
+graphify-out/
